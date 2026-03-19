@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  /* Clean focus ring */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-2;
+  }
+}
+
+@layer utilities {
+  /* Page entrance animation */
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  /* Result cards appear animation */
+  .animate-result-in {
+    animation: resultIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Terminal text typewriter flash */
+  .animate-result-flash {
+    animation: resultFlash 0.4s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes resultIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes resultFlash {
+  0%   { color: #86efac; }  /* green-300 */
+  40%  { color: #4ade80; }  /* green-400 bright */
+  100% { color: #4ade80; }  /* green-400 settle */
+}
