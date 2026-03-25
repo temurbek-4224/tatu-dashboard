@@ -213,45 +213,87 @@ export default function CryptoanalysisPanel({ onDataChange, onPDFExport, isPdfLo
       </div>
 
       {/* ── Results footer with PDF ──────────────────────────────────────── */}
-      <div className="border-t border-slate-100 pt-5 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-xs text-slate-400">
-          {caData
-            ? `Kriptoanaliz natijalari tayyor — PDF ga kiritiladi.`
-            : "Tahlil qilish tugmachasini bosing — natija PDF ga kiradi."}
-        </p>
+      {(() => {
+        const caesarNeedsSelection =
+          caData?.cipher === "caesar" &&
+          caData.caesarVariants != null &&
+          caData.caesarSelectedK == null;
+        const pdfBlocked = isPdfLoading || caesarNeedsSelection;
 
-        <button
-          onClick={onPDFExport}
-          disabled={isPdfLoading}
-          title="To'liq akademik hisobotni PDF formatida yuklab olish"
-          className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl
-            border transition-all
-            ${isPdfLoading
-              ? "text-rose-400 border-rose-200 bg-rose-50 cursor-not-allowed"
-              : "text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95"
-            }`}
-        >
-          {isPdfLoading ? (
-            <>
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Tayyorlanmoqda…
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 10v6m0 0l-2-2m2 2l2-2" />
-              </svg>
-              PDF yuklab olish
-            </>
-          )}
-        </button>
-      </div>
+        return (
+          <div className="border-t border-slate-100 pt-5 space-y-3">
+            {/* Caesar selection warning */}
+            {caesarNeedsSelection && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
+                <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-xs text-amber-800">
+                  <strong>Variant tanlanmagan.</strong> PDF yaratish uchun yuqoridagi ro&apos;yxatdan
+                  to&apos;g&apos;ri Sezar variantini tanlang.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-slate-400">
+                {caData && !caesarNeedsSelection
+                  ? "Kriptoanaliz natijalari tayyor — PDF ga kiritiladi."
+                  : caesarNeedsSelection
+                  ? "Variantni tanlagach PDF yuklab olish mumkin bo'ladi."
+                  : "Tahlil qilish tugmachasini bosing — natija PDF ga kiradi."}
+              </p>
+
+              <button
+                onClick={onPDFExport}
+                disabled={pdfBlocked}
+                title={
+                  caesarNeedsSelection
+                    ? "Avval to'g'ri Sezar variantini tanlang"
+                    : "To'liq akademik hisobotni PDF formatida yuklab olish"
+                }
+                className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl
+                  border transition-all
+                  ${isPdfLoading
+                    ? "text-rose-400 border-rose-200 bg-rose-50 cursor-not-allowed"
+                    : caesarNeedsSelection
+                    ? "text-amber-400 border-amber-200 bg-amber-50 cursor-not-allowed"
+                    : "text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95"
+                  }`}
+              >
+                {isPdfLoading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Tayyorlanmoqda…
+                  </>
+                ) : caesarNeedsSelection ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    Variant tanlang
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 10v6m0 0l-2-2m2 2l2-2" />
+                    </svg>
+                    PDF yuklab olish
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

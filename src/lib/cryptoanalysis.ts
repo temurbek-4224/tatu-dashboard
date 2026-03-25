@@ -31,7 +31,9 @@ export interface CryptoanalysisData {
   atbashResult?: string;
   // Caesar
   caesarVariants?: CaesarVariant[];
-  caesarBestK?: number;
+  /** User-manually-selected Caesar key — no automatic assumption */
+  caesarSelectedK?: number;
+  caesarSelectedText?: string;
   // Polibey
   polibeyResult?: string;
   // Vigenere

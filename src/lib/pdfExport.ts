@@ -534,34 +534,45 @@ export async function generateLabPDF(opts: PDFExportOptions): Promise<void> {
         resultRow("01  Atbash — Ochiq matn (self-inverse)", ca.atbashResult, C.rose600, false);
 
       } else if (ca.cipher === "caesar" && ca.caesarVariants) {
-        // Best variant hero row
-        const best = ca.caesarVariants.find(v => v.k === ca.caesarBestK) ?? ca.caesarVariants[0];
-        resultRow(
-          `01  Sezar — Eng ehtimoliy variant  (k=${best.k}, ball=${best.score})`,
-          best.text,
-          C.amber600,
-          false,
-        );
-        y += 2;
+        const hasSelection = ca.caesarSelectedK != null && ca.caesarSelectedText != null;
 
-        // Compact table of all variants
-        need(10);
+        if (hasSelection) {
+          // User-selected result — primary row
+          resultRow(
+            `01  Sezar — Tanlangan variant  (k=${ca.caesarSelectedK})`,
+            ca.caesarSelectedText!,
+            C.amber600,
+            false,
+          );
+          y += 2;
+          need(8);
+          italic(); ss(7.5); sc(C.amber600);
+          doc.text("To'g'ri variant foydalanuvchi tomonidan tanlandi.", ML, y);
+          y += 8;
+        } else {
+          // No selection yet
+          resultRow("01  Sezar — Tanlangan variant", "Foydalanuvchi hali variant tanlamagan", C.amber600, true);
+          y += 2;
+        }
+
+        // All 25 variants secondary table
+        need(12);
         bold(); ss(8); sc(C.slate600);
-        doc.text("Barcha 25 variant:", ML, y);
-        y += 6;
+        doc.text("Barcha ko'rib chiqilgan variantlar:", ML, y);
+        y += 7;
 
         const colW = CW / 3;
         for (let i = 0; i < ca.caesarVariants.length; i += 3) {
           const rowVars = ca.caesarVariants.slice(i, i + 3);
           need(9);
           rowVars.forEach((v, ci) => {
-            const isBest = v.k === ca.caesarBestK;
+            const isChosen = v.k === ca.caesarSelectedK;
             const x = ML + ci * colW;
-            if (isBest) { sf(C.amber100); sd(C.amber200); doc.rect(x, y - 5, colW - 1, 8, "FD"); }
-            bold(); ss(7); sc(isBest ? C.amber600 : C.slate500);
-            doc.text(`k=${v.k} (${v.score})`, x + 2, y);
+            if (isChosen) { sf(C.amber100); sd(C.amber200); doc.rect(x, y - 5, colW - 1, 8, "FD"); }
+            bold(); ss(7); sc(isChosen ? C.amber600 : C.slate500);
+            doc.text(`k=${v.k}`, x + 2, y);
             mono(); ss(7); sc(C.slate900);
-            const txt = v.text.length > 22 ? v.text.slice(0, 22) + "…" : v.text;
+            const txt = v.text.length > 24 ? v.text.slice(0, 24) + "…" : v.text;
             doc.text(txt, x + 2, y + 5);
           });
           y += 10;
