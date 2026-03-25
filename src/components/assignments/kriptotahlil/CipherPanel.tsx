@@ -11,15 +11,17 @@ import {
 } from "@/lib/ciphers";
 import { generateLabPDF } from "@/lib/pdfExport";
 import CipherResultCard from "./CipherResultCard";
+import CryptoanalysisPanel from "./CryptoanalysisPanel";
+import type { CryptoanalysisData } from "@/lib/cryptoanalysis";
 
-type Mode = "encrypt" | "decrypt";
+type Mode = "encrypt" | "decrypt" | "analyze";
 
 const SAMPLE_TEXT = "HELLO WORLD";
 
 const EMPTY_RESULTS: CipherResults = { atbash: "", caesar: "", polibey: "", vigenere: "" };
 
-// howItWorks descriptions per cipher (mode-aware)
-const HOW: Record<string, (mode: Mode, caesarKey: number, vigenereKey: string) => string> = {
+// howItWorks descriptions per cipher (mode-aware — only used in encrypt/decrypt)
+const HOW: Record<string, (mode: "encrypt" | "decrypt", caesarKey: number, vigenereKey: string) => string> = {
   atbash: () =>
     "Har bir harf alifboning teskari tartibidagi harfiga almashtiriladi: A↔Z, B↔Y, …. " +
     "Kalit talab qilinmaydi. Shifrlash va deshifrlash operatsiyasi bir xil (self-inverse).",
@@ -50,6 +52,7 @@ export default function CipherPanel() {
   const [error, setError]             = useState("");
   const [isLoading, setIsLoading]     = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [caData, setCaData]           = useState<CryptoanalysisData | null>(null);
   const [showSteps, setShowSteps]     = useState(false);
   const [allCopied, setAllCopied]     = useState(false);
   const [resultKey, setResultKey]     = useState(0); // drives re-animation
@@ -91,6 +94,7 @@ export default function CipherPanel() {
   const switchMode = (m: Mode) => {
     setMode(m);
     setResults(EMPTY_RESULTS);
+    setCaData(null);
     setError("");
   };
 
@@ -184,24 +188,34 @@ export default function CipherPanel() {
   };
 
   // ── Export PDF ────────────────────────────────────────────────────────────
-  const handlePDFExport = async () => {
+  const handlePDFExport = useCallback(async () => {
     setIsPdfLoading(true);
     try {
-      await generateLabPDF({ inputText: text, caesarKey, vigenereKey, results, mode });
+      await generateLabPDF({
+        inputText: text,
+        caesarKey,
+        vigenereKey,
+        results,
+        mode,
+        cryptoAnalysis: mode === "analyze" ? caData ?? undefined : undefined,
+      });
     } finally {
       setIsPdfLoading(false);
     }
-  };
+  }, [text, caesarKey, vigenereKey, results, mode, caData]);
 
   // ── Steps for cards ────────────────────────────────────────────────────────
+  // Narrowed alias — only used within mode !== "analyze" blocks
+  const encDecMode = (mode === "analyze" ? "encrypt" : mode) as "encrypt" | "decrypt";
+
   const caesarSteps: CipherStep[] = showSteps && hasResults
-    ? getCaesarSteps(text, caesarKey, mode)
+    ? getCaesarSteps(text, caesarKey, encDecMode)
     : [];
   const vigenereSteps: CipherStep[] = showSteps && hasResults
-    ? getVigenereSteps(text, vigenereKey, mode)
+    ? getVigenereSteps(text, vigenereKey, encDecMode)
     : [];
 
-  const processLabel = mode === "encrypt" ? "Shifrlash" : "Deshifrlash";
+  const processLabel = mode === "encrypt" ? "Shifrlash" : mode === "decrypt" ? "Deshifrlash" : "Kriptoanaliz";
 
   return (
     <section>
@@ -230,7 +244,7 @@ export default function CipherPanel() {
             </div>
           </div>
 
-          {/* Encrypt / Decrypt mode tabs */}
+          {/* Mode tabs — Shifrlash / Deshifrlash / Kriptoanaliz */}
           <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 flex-shrink-0">
             <button
               onClick={() => switchMode("encrypt")}
@@ -260,13 +274,37 @@ export default function CipherPanel() {
               </svg>
               Deshifrlash
             </button>
+            <button
+              onClick={() => switchMode("analyze")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all
+                ${mode === "analyze"
+                  ? "bg-white text-sky-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+                }`}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Kriptoanaliz
+            </button>
           </div>
         </div>
 
+        {/* ── Kriptoanaliz panel (replaces encrypt/decrypt UI entirely) ──── */}
+        {mode === "analyze" && (
+          <CryptoanalysisPanel
+            onDataChange={(d) => setCaData(d)}
+            onPDFExport={handlePDFExport}
+            isPdfLoading={isPdfLoading}
+          />
+        )}
+
+        {mode !== "analyze" && (<>
         <div className="p-6 space-y-5">
 
           {/* ── Mode banner ────────────────────────────────────────────────── */}
-          {mode === "decrypt" && (
+          {encDecMode === "decrypt" && (
             <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 animate-fade-in">
               <svg className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -560,11 +598,11 @@ export default function CipherPanel() {
               subtitle="A ↔ Z · self-inverse · kalitsiz"
               result={results.atbash}
               inputText={text}
-              howItWorks={HOW.atbash(mode, caesarKey, vigenereKey)}
+              howItWorks={HOW.atbash(encDecMode, caesarKey, vigenereKey)}
               accentColor="rose"
               isEmpty={!hasResults}
               resultKey={resultKey}
-              mode={mode}
+              mode={encDecMode}
             />
             <CipherResultCard
               index={2}
@@ -572,12 +610,12 @@ export default function CipherPanel() {
               subtitle={`k = ${caesarKey} · siljish · 25 variant`}
               result={results.caesar}
               inputText={text}
-              howItWorks={HOW.caesar(mode, caesarKey, vigenereKey)}
+              howItWorks={HOW.caesar(encDecMode, caesarKey, vigenereKey)}
               accentColor="amber"
               isEmpty={!hasResults}
               steps={caesarSteps}
               resultKey={resultKey}
-              mode={mode}
+              mode={encDecMode}
             />
             <CipherResultCard
               index={3}
@@ -585,11 +623,11 @@ export default function CipherPanel() {
               subtitle="5×5 · koordinat juftligi"
               result={results.polibey}
               inputText={text}
-              howItWorks={HOW.polibey(mode, caesarKey, vigenereKey)}
+              howItWorks={HOW.polibey(encDecMode, caesarKey, vigenereKey)}
               accentColor="emerald"
               isEmpty={!hasResults}
               resultKey={resultKey}
-              mode={mode}
+              mode={encDecMode}
             />
             <CipherResultCard
               index={4}
@@ -597,15 +635,17 @@ export default function CipherPanel() {
               subtitle={`kalit: ${vigenereKey || "KEY"} · ko'p alifboli`}
               result={results.vigenere}
               inputText={text}
-              howItWorks={HOW.vigenere(mode, caesarKey, vigenereKey)}
+              howItWorks={HOW.vigenere(encDecMode, caesarKey, vigenereKey)}
               accentColor="violet"
               isEmpty={!hasResults}
               steps={vigenereSteps}
               resultKey={resultKey}
-              mode={mode}
+              mode={encDecMode}
             />
           </div>
         </div>
+
+        </>)} {/* end mode !== "analyze" */}
 
       </div>
     </section>

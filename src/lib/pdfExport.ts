@@ -5,13 +5,15 @@
  */
 
 import type { CipherResults } from "@/lib/ciphers";
+import type { CryptoanalysisData } from "@/lib/cryptoanalysis";
 
 export interface PDFExportOptions {
   inputText: string;
   caesarKey: number;
   vigenereKey: string;
   results: CipherResults;
-  mode: "encrypt" | "decrypt";
+  mode: "encrypt" | "decrypt" | "analyze";
+  cryptoAnalysis?: CryptoanalysisData;
 }
 
 // ── Colour palette ─────────────────────────────────────────────────────────────
@@ -39,7 +41,14 @@ const C = {
   emerald600:[5,   150, 105] as RGB,
   emerald100:[209, 250, 229] as RGB,
   violet600: [124, 58,  237] as RGB,
+  violet200: [221, 214, 254] as RGB,
   violet100: [237, 233, 254] as RGB,
+  violet50:  [245, 243, 255] as RGB,
+  amber200:  [253, 230, 138] as RGB,
+  sky700:    [3,   105, 161] as RGB,
+  sky600:    [2,   132, 199] as RGB,
+  sky200:    [186, 230, 253] as RGB,
+  sky50:     [240, 249, 255] as RGB,
   white:     [255, 255, 255] as RGB,
 };
 
@@ -420,61 +429,186 @@ export async function generateLabPDF(opts: PDFExportOptions): Promise<void> {
   y += 4;
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // ── 4. AMALIY QISM ────────────────────────────────────────────────────────
+  // ── 4. AMALIY QISM ────────────────────────────────────────────════════════
   // ══════════════════════════════════════════════════════════════════════════════
   sectionTitle("4", "AMALIY QISM");
 
-  const hasResults = opts.results.atbash !== "" || opts.results.caesar !== "";
-  const modeLabel  = opts.mode === "encrypt" ? "Shifrlash" : "Deshifrlash";
+  const modeLabel =
+    opts.mode === "encrypt" ? "Shifrlash" :
+    opts.mode === "decrypt" ? "Deshifrlash" : "Kriptoanaliz";
 
-  // Parameters summary box
-  const paramH = 34;
-  need(paramH + 2);
-  sf(C.slate50); sd(C.slate200); doc.setLineWidth(0.25);
-  doc.rect(ML, y, CW, paramH, "FD");
-  doc.setLineWidth(0.2);
+  if (opts.mode !== "analyze") {
+    // ── Encrypt / Decrypt mode ──────────────────────────────────────────────
+    const hasResults = opts.results.atbash !== "" || opts.results.caesar !== "";
 
-  // Two-column parameter layout
-  const paramLeft  = ML + 5;
-  const paramRight = ML + CW / 2 + 4;
-  let py = y + 7;
+    // Parameters summary box
+    const paramH = 34;
+    need(paramH + 2);
+    sf(C.slate50); sd(C.slate200); doc.setLineWidth(0.25);
+    doc.rect(ML, y, CW, paramH, "FD");
+    doc.setLineWidth(0.2);
 
-  const paramKV = (key: string, val: string, x: number, vy: number, keyCol: RGB = C.slate600, mono_ = false) => {
-    bold(); ss(8); sc(keyCol);
-    doc.text(key, x, vy);
-    const kw = tw(key) + 2;
-    if (mono_) mono(); else normal();
-    ss(9); sc(C.slate900);
-    doc.text(val, x + kw, vy);
-  };
+    const paramLeft  = ML + 5;
+    const paramRight = ML + CW / 2 + 4;
+    let py = y + 7;
 
-  paramKV("Rejim:",          modeLabel,                paramLeft,  py, C.indigo700);
-  paramKV("Sezar kaliti:",   `k = ${opts.caesarKey}`,  paramRight, py, C.amber600);
-  py += 9;
-  paramKV("Kirish matni:",   opts.inputText || "—",    paramLeft,  py, C.slate700, true);
-  py += 9;
-  paramKV("Vijiner kaliti:", opts.vigenereKey || "KEY", paramRight, py - 9, C.violet600, true);
+    const paramKV = (key: string, val: string, x: number, vy: number, keyCol: RGB = C.slate600, mono_ = false) => {
+      bold(); ss(8); sc(keyCol);
+      doc.text(key, x, vy);
+      const kw = tw(key) + 2;
+      if (mono_) mono(); else normal();
+      ss(9); sc(C.slate900);
+      doc.text(val, x + kw, vy);
+    };
 
-  y += paramH + 6;
+    paramKV("Rejim:",          modeLabel,                paramLeft,  py, C.indigo700);
+    paramKV("Sezar kaliti:",   `k = ${opts.caesarKey}`,  paramRight, py, C.amber600);
+    py += 9;
+    paramKV("Kirish matni:",   opts.inputText || "—",    paramLeft,  py, C.slate700, true);
+    py += 9;
+    paramKV("Vijiner kaliti:", opts.vigenereKey || "KEY", paramRight, py - 9, C.violet600, true);
 
-  // Results label
-  bold(); ss(9); sc(C.slate500);
-  doc.text("NATIJALAR:", ML, y);
-  y += 7;
+    y += paramH + 6;
 
-  // Four result rows
-  resultRow("01  Atbash shifri",                       opts.results.atbash,   C.rose600,    !hasResults);
-  resultRow("02  Sezar shifri  (k=" + opts.caesarKey + ")", opts.results.caesar, C.amber600, !hasResults);
-  resultRow("03  Polibey kvadrati",                    opts.results.polibey,  C.emerald600, !hasResults);
-  resultRow("04  Vijiner  (kalit: " + (opts.vigenereKey || "KEY") + ")", opts.results.vigenere, C.violet600, !hasResults);
+    bold(); ss(9); sc(C.slate500);
+    doc.text("NATIJALAR:", ML, y);
+    y += 7;
 
-  y += 6;
-  need(8);
-  italic(); ss(7.5); sc(C.slate400);
-  doc.text(
-    "* Natijalar dasturiy hisoblangan. Qo'lda tekshirish tavsiya etiladi.",
-    ML, y
-  );
+    resultRow("01  Atbash shifri",                            opts.results.atbash,   C.rose600,    !hasResults);
+    resultRow("02  Sezar shifri  (k=" + opts.caesarKey + ")", opts.results.caesar,   C.amber600,   !hasResults);
+    resultRow("03  Polibey kvadrati",                         opts.results.polibey,  C.emerald600, !hasResults);
+    resultRow("04  Vijiner  (kalit: " + (opts.vigenereKey || "KEY") + ")", opts.results.vigenere, C.violet600, !hasResults);
+
+    y += 6;
+    need(8);
+    italic(); ss(7.5); sc(C.slate400);
+    doc.text(
+      "* Natijalar dasturiy hisoblangan. Qo'lda tekshirish tavsiya etiladi.",
+      ML, y
+    );
+  } else {
+    // ── Kriptoanaliz mode ───────────────────────────────────────────────────
+    const ca = opts.cryptoAnalysis;
+
+    // Info box
+    const infoH = 22;
+    need(infoH + 2);
+    sf(C.sky50); sd(C.sky200); doc.setLineWidth(0.25);
+    doc.rect(ML, y, CW, infoH, "FD");
+    bold(); ss(8); sc(C.sky700);
+    doc.text("Rejim:", ML + 5, y + 8);
+    normal(); ss(9); sc(C.slate900);
+    doc.text(modeLabel, ML + 5 + tw("Rejim:") + 2, y + 8);
+    if (ca) {
+      const cipherNames: Record<string, string> = {
+        atbash: "Atbash shifri", caesar: "Sezar shifri",
+        polibey: "Polibey kvadrati", vigenere: "Vijiner shifri",
+      };
+      bold(); ss(8); sc(C.sky700);
+      doc.text("Tanlangan algoritm:", ML + 5, y + 17);
+      normal(); ss(9); sc(C.slate900);
+      doc.text(cipherNames[ca.cipher] ?? ca.cipher, ML + 5 + tw("Tanlangan algoritm:") + 2, y + 17);
+    }
+    y += infoH + 6;
+
+    if (!ca) {
+      bold(); ss(9); sc(C.slate500);
+      doc.text("NATIJALAR:", ML, y);
+      y += 7;
+      resultRow("Kriptoanaliz", "Ma'lumot kiritilmagan", C.sky600, true);
+    } else {
+      bold(); ss(9); sc(C.slate500);
+      doc.text("KRIPTOANALIZ NATIJALARI:", ML, y);
+      y += 7;
+
+      // Ciphertext row
+      need(14);
+      italic(); ss(7.5); sc(C.slate500);
+      doc.text("Shifrmatn:", ML, y);
+      mono(); ss(8); sc(C.slate900);
+      const ctDisplay = ca.ciphertext.length > 80 ? ca.ciphertext.slice(0, 80) + "…" : ca.ciphertext;
+      doc.text(ctDisplay, ML + tw("Shifrmatn:") + 2, y);
+      y += 8;
+
+      if (ca.cipher === "atbash" && ca.atbashResult) {
+        resultRow("01  Atbash — Ochiq matn (self-inverse)", ca.atbashResult, C.rose600, false);
+
+      } else if (ca.cipher === "caesar" && ca.caesarVariants) {
+        // Best variant hero row
+        const best = ca.caesarVariants.find(v => v.k === ca.caesarBestK) ?? ca.caesarVariants[0];
+        resultRow(
+          `01  Sezar — Eng ehtimoliy variant  (k=${best.k}, ball=${best.score})`,
+          best.text,
+          C.amber600,
+          false,
+        );
+        y += 2;
+
+        // Compact table of all variants
+        need(10);
+        bold(); ss(8); sc(C.slate600);
+        doc.text("Barcha 25 variant:", ML, y);
+        y += 6;
+
+        const colW = CW / 3;
+        for (let i = 0; i < ca.caesarVariants.length; i += 3) {
+          const rowVars = ca.caesarVariants.slice(i, i + 3);
+          need(9);
+          rowVars.forEach((v, ci) => {
+            const isBest = v.k === ca.caesarBestK;
+            const x = ML + ci * colW;
+            if (isBest) { sf(C.amber100); sd(C.amber200); doc.rect(x, y - 5, colW - 1, 8, "FD"); }
+            bold(); ss(7); sc(isBest ? C.amber600 : C.slate500);
+            doc.text(`k=${v.k} (${v.score})`, x + 2, y);
+            mono(); ss(7); sc(C.slate900);
+            const txt = v.text.length > 22 ? v.text.slice(0, 22) + "…" : v.text;
+            doc.text(txt, x + 2, y + 5);
+          });
+          y += 10;
+        }
+
+      } else if (ca.cipher === "polibey" && ca.polibeyResult) {
+        resultRow("01  Polibey kvadrati — Dekodlangan matn", ca.polibeyResult, C.emerald600, false);
+
+      } else if (ca.cipher === "vigenere") {
+        if (ca.vigenereResult && ca.vigenereGuessedKey) {
+          resultRow(
+            `01  Vijiner — Taxminiy kalit: ${ca.vigenereGuessedKey}`,
+            ca.vigenereResult,
+            C.violet600,
+            false,
+          );
+        } else {
+          resultRow("01  Vijiner", "Taxminiy kalit kiritilmagan", C.violet600, true);
+        }
+        // Theory note
+        y += 2;
+        need(20);
+        sf(C.violet50); sd(C.violet200); doc.setLineWidth(0.2);
+        doc.rect(ML, y, CW, 18, "FD");
+        italic(); ss(7.5); sc(C.violet600);
+        doc.text(
+          "Kasiski testi + IC indeksi + Chastota tahlili usullari qo'llaniladi.",
+          ML + 4, y + 7
+        );
+        doc.text(
+          "To'liq avtomatik yechish uchun kalit uzunligini aniqlash zarur.",
+          ML + 4, y + 13
+        );
+        y += 20;
+      } else {
+        resultRow("01  Natija", "Ma'lumot kiritilmagan", C.sky600, true);
+      }
+
+      y += 4;
+      need(8);
+      italic(); ss(7.5); sc(C.slate400);
+      doc.text(
+        "* Kriptoanaliz natijalari taxminiy bo'lishi mumkin. Qo'lda tekshirish tavsiya etiladi.",
+        ML, y
+      );
+    }
+  }
 
   // ── Final page footer ──────────────────────────────────────────────────────
   footer();
