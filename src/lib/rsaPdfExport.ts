@@ -444,3 +444,306 @@ export async function generateRsaLabPDF(opts: RsaPDFOptions): Promise<void> {
   footer();
   doc.save("kriptotahlil-2-topshiriq-temurbek-xaydarov.pdf");
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── Combined (all-sections) PDF export ────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+export interface CombinedEncryptData {
+  inputMode: "number" | "text";
+  // number mode
+  inputValue?: number;
+  outputValue?: number;
+  // text mode
+  originalText?: string;
+  asciiCodes?: number[];
+  encrypted?: number[];
+}
+
+export interface CombinedDecryptData {
+  inputMode: "number" | "text";
+  inputValue?: number;
+  outputValue?: number;
+  // text mode
+  cipherNums?: number[];
+  decryptedCodes?: number[];
+  decodedText?: string;
+}
+
+export interface CombinedAttackData {
+  type: "repeated" | "signature" | "chosen";
+  summary: string;
+  found: boolean;
+}
+
+export interface CombinedRsaPDFOptions {
+  key: { p: number; q: number; e: number; n: number; phi: number; d: number };
+  encrypt?: CombinedEncryptData;
+  decrypt?: CombinedDecryptData;
+  attack?: CombinedAttackData;
+}
+
+export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promise<void> {
+  const { jsPDF } = await import("jspdf");
+
+  const doc  = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const PW   = 210;
+  const PH   = 297;
+  const ML   = 18;
+  const MR   = 18;
+  const RX   = PW - MR;
+  const CW   = RX - ML;
+  const LH   = 5;
+  let y      = 0;
+  let pageNo = 1;
+
+  const sc   = (col: RGB) => doc.setTextColor(...col);
+  const sf   = (col: RGB) => doc.setFillColor(...col);
+  const sd   = (col: RGB) => doc.setDrawColor(...col);
+  const ss   = (n: number) => doc.setFontSize(n);
+  const bold   = () => doc.setFont("helvetica", "bold");
+  const normal = () => doc.setFont("helvetica", "normal");
+  const italic = () => doc.setFont("helvetica", "italic");
+  const mono   = () => doc.setFont("courier", "normal");
+  const monob  = () => doc.setFont("courier", "bold");
+  const wrap   = (s: string, w: number): string[] => doc.splitTextToSize(s, w);
+  const tw     = (s: string): number => doc.getTextWidth(s);
+  const textLines = (lines: string[], x: number, startY: number, lh = LH) =>
+    lines.forEach((ln, i) => doc.text(ln, x, startY + i * lh));
+
+  const footer = () => {
+    const fy = PH - 10;
+    sd(C.slate300); doc.setLineWidth(0.2);
+    doc.line(ML, fy - 4, RX, fy - 4);
+    normal(); ss(7.5); sc(C.slate400);
+    doc.text("Kriptotahlil — 2-topshiriq  |  RSA To'liq Laboratoriya Hisoboti", ML, fy);
+    doc.text(`${pageNo}-bet`, RX, fy, { align: "right" });
+  };
+
+  const need = (h: number) => {
+    if (y + h > PH - 22) {
+      footer(); doc.addPage(); pageNo++; y = 22;
+    }
+  };
+
+  const sectionTitle = (n: string, title: string, col: RGB = C.indigo700) => {
+    need(18); y += 3;
+    sf(col); sd(col);
+    doc.rect(ML, y - 6, 3.5, 9.5, "F");
+    bold(); ss(12); sc(col);
+    doc.text(`${n}. ${title}`, ML + 7, y);
+    y += 2;
+    sd(C.indigo200); doc.setLineWidth(0.4);
+    doc.line(ML, y + 1, RX, y + 1);
+    doc.setLineWidth(0.2);
+    y += 8;
+  };
+
+  const emptySection = () => {
+    need(14);
+    sf(C.slate100); sd(C.slate200); doc.setLineWidth(0.2);
+    doc.rect(ML, y, CW, 12, "FD");
+    italic(); ss(9); sc(C.slate400);
+    doc.text("Bu bo'lim bajarilmagan.", ML + 5, y + 7.5);
+    y += 16;
+  };
+
+  const kvRow = (label: string, val: string, x: number, ky: number, lCol: RGB = C.slate600) => {
+    bold(); ss(8); sc(lCol);
+    doc.text(label, x, ky);
+    mono(); ss(9); sc(C.slate900);
+    doc.text(val, x + tw(label) + 2, ky);
+  };
+
+  const resultBox = (label: string, content: string, bg: RGB, fg: RGB, border: RGB) => {
+    const lines = wrap(content, CW - 10);
+    const h = lines.length * 5 + 10;
+    need(h + 4);
+    bold(); ss(8); sc(C.slate600);
+    doc.text(label, ML, y); y += 5;
+    sf(bg); sd(border); doc.setLineWidth(0.2);
+    doc.rect(ML, y, CW, h, "FD");
+    monob(); ss(8.5); sc(fg);
+    textLines(lines, ML + 5, y + 6, 5);
+    y += h + 5;
+  };
+
+  const asciiGrid = (codes: number[], labelFn: (c: number) => string, accent: RGB) => {
+    // Render up to 32 per row in a compact grid
+    const perRow = 16;
+    const cellW  = Math.min(CW / perRow, 11);
+    const rows   = Math.ceil(codes.length / perRow);
+    const gridH  = rows * 12 + 4;
+    need(gridH + 4);
+    for (let r = 0; r < rows; r++) {
+      const slice = codes.slice(r * perRow, (r + 1) * perRow);
+      slice.forEach((code, ci) => {
+        const cx = ML + ci * cellW;
+        const cy = y + r * 12;
+        // char label
+        bold(); ss(7); sc(accent);
+        doc.text(labelFn(code), cx + cellW / 2, cy + 5, { align: "center" });
+        // code number
+        normal(); ss(6); sc(C.slate500);
+        doc.text(String(code), cx + cellW / 2, cy + 10, { align: "center" });
+      });
+    }
+    y += gridH + 3;
+  };
+
+  // ── Cover ─────────────────────────────────────────────────────────────────
+  sf(C.indigo700); doc.rect(0, 0, PW, 42, "F");
+  sf(C.indigo600); doc.rect(0, 38, PW, 4, "F");
+  bold(); ss(9); sc(C.indigo200);
+  doc.text("TOSHKENT AXBOROT TEXNOLOGIYALARI UNIVERSITETI", PW / 2, 10, { align: "center" });
+  bold(); ss(8); sc(C.indigo200);
+  doc.text("Kriptotahlil fani  —  2-topshiriq  |  RSA Algoritmi Kriptotahlili", PW / 2, 17, { align: "center" });
+  bold(); ss(18); sc(C.white);
+  doc.text("TO'LIQ LABORATORIYA HISOBOTI", PW / 2, 30, { align: "center" });
+  normal(); ss(9); sc(C.indigo200);
+  doc.text("Shifrlash · Deshifrlash · Kriptoanaliz", PW / 2, 37, { align: "center" });
+
+  // Student info bar
+  sf(C.slate50); sd(C.slate200); doc.setLineWidth(0.25);
+  doc.rect(ML, 47, CW, 18, "FD");
+  bold(); ss(8); sc(C.slate600); doc.text("Talaba:", ML + 4, 54);
+  bold(); ss(9); sc(C.indigo700);
+  doc.text("Temurbek Xaydarov", ML + 4 + tw("Talaba:") + 2, 54);
+  bold(); ss(8); sc(C.slate600); doc.text("Fan:", ML + 4, 61);
+  normal(); ss(8.5); sc(C.slate700);
+  doc.text("Kriptotahlil  |  2-topshiriq — RSA algoritmi kriptotahlili", ML + 4 + tw("Fan:") + 2, 61);
+
+  y = 72;
+
+  // ── Section 1: Key parameters ─────────────────────────────────────────────
+  sectionTitle("1", "RSA KALIT PARAMETRLARI");
+  const kH = 40;
+  need(kH + 2);
+  sf(C.sky50); sd(C.sky200); doc.setLineWidth(0.2);
+  doc.rect(ML, y, CW, kH, "FD");
+  const c1 = ML + 5, c2 = ML + CW / 2 + 4;
+  let py = y + 10;
+  kvRow("p =", String(opts.key.p), c1, py, C.rose600);
+  kvRow("q =", String(opts.key.q), c2, py, C.rose600);
+  py += 10;
+  kvRow("n = p·q =", String(opts.key.n), c1, py, C.sky700);
+  kvRow("φ(n) =", String(opts.key.phi), c2, py, C.sky700);
+  py += 10;
+  kvRow("e =", String(opts.key.e), c1, py, C.amber600);
+  kvRow("d =", String(opts.key.d), c2, py, C.amber600);
+  y += kH + 8;
+
+  // ── Section 2: Shifrlash ──────────────────────────────────────────────────
+  sectionTitle("2", "SHIFRLASH NATIJASI", C.indigo700);
+  if (!opts.encrypt) {
+    emptySection();
+  } else if (opts.encrypt.inputMode === "number") {
+    need(12);
+    kvRow("Kirish (M):", String(opts.encrypt.inputValue ?? "—"), ML, y, C.slate600); y += 7;
+    kvRow("Natija (C):", String(opts.encrypt.outputValue ?? "—"), ML, y, C.emerald600); y += 7;
+    need(10);
+    italic(); ss(8); sc(C.slate500);
+    doc.text(
+      `${opts.encrypt.inputValue}^${opts.key.e} mod ${opts.key.n} = ${opts.encrypt.outputValue}`,
+      ML, y
+    );
+    y += 8;
+  } else {
+    // text mode
+    if (opts.encrypt.originalText) {
+      resultBox("Asl matn:", opts.encrypt.originalText, C.slate50, C.slate900, C.slate200);
+    }
+    if (opts.encrypt.asciiCodes && opts.encrypt.asciiCodes.length > 0) {
+      need(10);
+      bold(); ss(8); sc(C.indigo600);
+      doc.text("Raqamli ko'rinish (ASCII):", ML, y); y += 6;
+      asciiGrid(
+        opts.encrypt.asciiCodes,
+        (c) => c >= 32 && c < 127 ? String.fromCharCode(c) : "?",
+        C.indigo600,
+      );
+    }
+    if (opts.encrypt.encrypted && opts.encrypt.encrypted.length > 0) {
+      resultBox(
+        "Shifrlangan natija:",
+        opts.encrypt.encrypted.join("  "),
+        C.slate100, C.indigo700, C.indigo200,
+      );
+    }
+  }
+
+  // ── Section 3: Deshifrlash ────────────────────────────────────────────────
+  sectionTitle("3", "DESHIFRLASH NATIJASI", C.sky700);
+  if (!opts.decrypt) {
+    emptySection();
+  } else if (opts.decrypt.inputMode === "number") {
+    need(12);
+    kvRow("Kirish (C):", String(opts.decrypt.inputValue ?? "—"), ML, y, C.slate600); y += 7;
+    kvRow("Natija (M):", String(opts.decrypt.outputValue ?? "—"), ML, y, C.emerald600); y += 7;
+    need(10);
+    italic(); ss(8); sc(C.slate500);
+    doc.text(
+      `${opts.decrypt.inputValue}^${opts.key.d} mod ${opts.key.n} = ${opts.decrypt.outputValue}`,
+      ML, y
+    );
+    y += 8;
+  } else {
+    // text mode
+    if (opts.decrypt.cipherNums && opts.decrypt.cipherNums.length > 0) {
+      resultBox(
+        "Shifrlangan raqamlar:",
+        opts.decrypt.cipherNums.join("  "),
+        C.slate100, C.slate600, C.slate200,
+      );
+    }
+    if (opts.decrypt.decryptedCodes && opts.decrypt.decryptedCodes.length > 0) {
+      need(10);
+      bold(); ss(8); sc(C.sky600);
+      doc.text("Deshifrlangan ASCII kodlar:", ML, y); y += 6;
+      asciiGrid(
+        opts.decrypt.decryptedCodes,
+        (c) => c >= 32 && c < 127 ? String.fromCharCode(c) : "?",
+        C.sky600,
+      );
+    }
+    if (opts.decrypt.decodedText) {
+      resultBox("Ochiq matn:", opts.decrypt.decodedText, C.emerald100, C.emerald600, C.emerald100);
+    }
+  }
+
+  // ── Section 4: Kriptoanaliz ────────────────────────────────────────────────
+  const attackLabels: Record<string, string> = {
+    repeated:  "Takroriy shifrlash hujumi",
+    signature: "Notarius (ko'r imzo) hujumi",
+    chosen:    "Tanlangan shifrmatn hujumi",
+  };
+  sectionTitle("4", "KRIPTOANALIZ NATIJALARI", C.amber600);
+  if (!opts.attack) {
+    emptySection();
+  } else {
+    need(12);
+    bold(); ss(9); sc(C.amber600);
+    doc.text(`Hujum turi: ${attackLabels[opts.attack.type] ?? opts.attack.type}`, ML, y); y += 7;
+    const statusColor = opts.attack.found ? C.emerald600 : C.rose600;
+    bold(); ss(8.5); sc(statusColor);
+    doc.text(opts.attack.found ? "Natija: Muvaffaqiyatli" : "Natija: Topilmadi", ML, y); y += 7;
+    const sumLines = wrap(opts.attack.summary, CW - 10);
+    const sumH = sumLines.length * 5 + 10;
+    need(sumH + 2);
+    sf(opts.attack.found ? C.emerald100 : C.rose100);
+    sd(opts.attack.found ? C.emerald600 : C.rose600);
+    doc.setLineWidth(0.2);
+    doc.rect(ML, y, CW, sumH, "FD");
+    mono(); ss(8); sc(C.slate900);
+    textLines(sumLines, ML + 5, y + 6, 5);
+    y += sumH + 6;
+  }
+
+  y += 4;
+  need(8);
+  italic(); ss(7.5); sc(C.slate400);
+  doc.text("* Barcha hisoblashlar dasturiy amalga oshirilgan. Katta sonlar uchun qo'lda tekshirish tavsiya etilmaydi.", ML, y);
+
+  footer();
+  doc.save("kriptotahlil-2-topshiriq-tolik-hisobot-temurbek-xaydarov.pdf");
+}

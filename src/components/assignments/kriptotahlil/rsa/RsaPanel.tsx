@@ -6,7 +6,11 @@ import {
   repeatedEncryptionAttack, signatureAttack, chosenCiphertextAttack,
   type RsaKeyResult,
 } from "@/lib/rsa";
-import { generateRsaLabPDF, type RsaPDFOptions } from "@/lib/rsaPdfExport";
+import {
+  generateRsaLabPDF, type RsaPDFOptions,
+  generateCombinedRsaPDF,
+  type CombinedEncryptData, type CombinedDecryptData, type CombinedAttackData,
+} from "@/lib/rsaPdfExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Mode       = "encrypt" | "decrypt" | "analyze";
@@ -136,14 +140,25 @@ function NumInput({
 // ── Attack tabs ─────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function RepeatedEncryptionTab({ rsaKey, C }: { rsaKey: RsaKeyResult; C: number }) {
+function RepeatedEncryptionTab({
+  rsaKey, C, onResult,
+}: { rsaKey: RsaKeyResult; C: number; onResult?: (summary: string, found: boolean) => void }) {
   const [cipherInput, setCipherInput] = useState(String(C > 0 ? C : ""));
   const [result, setResult]           = useState<ReturnType<typeof repeatedEncryptionAttack> | null>(null);
 
   const run = () => {
     const cv = parseInt(cipherInput, 10);
     if (isNaN(cv) || cv < 0 || cv >= rsaKey.n) return;
-    setResult(repeatedEncryptionAttack(cv, rsaKey.e, rsaKey.n));
+    const res = repeatedEncryptionAttack(cv, rsaKey.e, rsaKey.n);
+    setResult(res);
+    if (res.found) {
+      onResult?.(
+        `C=${cv}, e=${rsaKey.e}, n=${rsaKey.n} → M=${res.M} (sikl j=${res.cycleLength})`,
+        true,
+      );
+    } else {
+      onResult?.(`C=${cv}, n=${rsaKey.n} → ${300} qadamda topilmadi.`, false);
+    }
   };
 
   const displaySteps = result ? result.steps.slice(0, 30) : [];
@@ -245,7 +260,9 @@ function RepeatedEncryptionTab({ rsaKey, C }: { rsaKey: RsaKeyResult; C: number 
   );
 }
 
-function SignatureAttackTab({ rsaKey }: { rsaKey: RsaKeyResult }) {
+function SignatureAttackTab({
+  rsaKey, onResult,
+}: { rsaKey: RsaKeyResult; onResult?: (summary: string, found: boolean) => void }) {
   const [mInput, setMInput] = useState("");
   const [rInput, setRInput] = useState("");
   const [result, setResult] = useState<ReturnType<typeof signatureAttack> | null>(null);
@@ -260,6 +277,10 @@ function SignatureAttackTab({ rsaKey }: { rsaKey: RsaKeyResult }) {
     const res = signatureAttack(M, r, rsaKey.e, rsaKey.n, rsaKey.d);
     if (!res.valid) { setError(res.error ?? "Xato"); return; }
     setResult(res);
+    onResult?.(
+      `M=${M}, r=${r}, n=${rsaKey.n} → y=${res.y}, S_y=${res.S_y}, M^d=${res.sig}`,
+      true,
+    );
   };
 
   return (
@@ -330,7 +351,9 @@ function SignatureAttackTab({ rsaKey }: { rsaKey: RsaKeyResult }) {
   );
 }
 
-function ChosenCiphertextTab({ rsaKey, lastCipher }: { rsaKey: RsaKeyResult; lastCipher: number }) {
+function ChosenCiphertextTab({
+  rsaKey, lastCipher, onResult,
+}: { rsaKey: RsaKeyResult; lastCipher: number; onResult?: (summary: string, found: boolean) => void }) {
   const [cInput, setCInput] = useState(lastCipher > 0 ? String(lastCipher) : "");
   const [rInput, setRInput] = useState("");
   const [result, setResult] = useState<ReturnType<typeof chosenCiphertextAttack> | null>(null);
@@ -345,6 +368,10 @@ function ChosenCiphertextTab({ rsaKey, lastCipher }: { rsaKey: RsaKeyResult; las
     const res = chosenCiphertextAttack(cv, r, rsaKey.e, rsaKey.n, rsaKey.d);
     if (!res.valid) { setError(res.error ?? "Xato"); return; }
     setResult(res);
+    onResult?.(
+      `C=${cv}, r=${r}, n=${rsaKey.n} → x=${res.x}, C'=${res.Cprime}, M'=${res.Mprime}, M=${res.M}`,
+      true,
+    );
   };
 
   return (
@@ -450,7 +477,13 @@ export default function RsaPanel() {
   const [textResult, setTextResult]   = useState<TextOpResult | null>(null);
   const [opError, setOpError]         = useState("");
 
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [isPdfLoading, setIsPdfLoading]         = useState(false);
+  const [isCombinedPdfLoading, setCombinedPdfLoading] = useState(false);
+
+  // Persistent records — survive mode switches so combined PDF always has all data
+  const [encryptRecord, setEncryptRecord] = useState<CombinedEncryptData | null>(null);
+  const [decryptRecord, setDecryptRecord] = useState<CombinedDecryptData | null>(null);
+  const [attackRecord,  setAttackRecord]  = useState<CombinedAttackData  | null>(null);
 
   // Generate key
   const handleKeygen = () => {
@@ -480,6 +513,12 @@ export default function RsaPanel() {
       ? rsaEncrypt(v, keyResult.e, keyResult.n)
       : rsaDecrypt(v, keyResult.d, keyResult.n);
     setOpResult(res);
+    // Persist for combined PDF
+    if (mode === "encrypt") {
+      setEncryptRecord({ inputMode: "number", inputValue: v, outputValue: res });
+    } else {
+      setDecryptRecord({ inputMode: "number", inputValue: v, outputValue: res });
+    }
   };
 
   // Text mode encrypt/decrypt
@@ -501,6 +540,7 @@ export default function RsaPanel() {
       }
       const encrypted = codes.map((c) => rsaEncrypt(c, keyResult.e, keyResult.n));
       setTextResult({ originalText: text, asciiCodes: codes, processed: encrypted });
+      setEncryptRecord({ inputMode: "text", originalText: text, asciiCodes: codes, encrypted });
     } else {
       // decrypt: expect space-separated numbers
       const raw = textInput.trim();
@@ -523,6 +563,7 @@ export default function RsaPanel() {
         processed: nums,
         decodedText,
       });
+      setDecryptRecord({ inputMode: "text", cipherNums: nums, decryptedCodes: decrypted, decodedText });
     }
   };
 
@@ -567,6 +608,24 @@ export default function RsaPanel() {
       setIsPdfLoading(false);
     }
   }, [keyResult, pInput, qInput, eInput, mode, msgInput, opResult, attackTab]);
+
+  // Combined (all-sections) PDF export
+  const handleCombinedPDF = useCallback(async () => {
+    if (!keyResult) return;
+    setCombinedPdfLoading(true);
+    try {
+      await generateCombinedRsaPDF({
+        key: { p: keyResult.p, q: keyResult.q, e: keyResult.e, n: keyResult.n, phi: keyResult.phi, d: keyResult.d },
+        encrypt: encryptRecord ?? undefined,
+        decrypt: decryptRecord ?? undefined,
+        attack:  attackRecord  ?? undefined,
+      });
+    } finally {
+      setCombinedPdfLoading(false);
+    }
+  }, [keyResult, encryptRecord, decryptRecord, attackRecord]);
+
+  const anyResult = encryptRecord !== null || decryptRecord !== null || attackRecord !== null;
 
   const inputLabel  = mode === "decrypt" ? "Shifrmatn C" : "Ochiq matn M";
   const outputLabel = mode === "decrypt" ? "Ochiq matn M" : "Shifrmatn C";
@@ -1005,9 +1064,12 @@ export default function RsaPanel() {
                   </div>
 
                   <div>
-                    {attackTab === "repeated"  && <RepeatedEncryptionTab rsaKey={keyResult} C={opResult ?? 0} />}
-                    {attackTab === "signature"  && <SignatureAttackTab rsaKey={keyResult} />}
-                    {attackTab === "chosen"     && <ChosenCiphertextTab rsaKey={keyResult} lastCipher={opResult ?? 0} />}
+                    {attackTab === "repeated"  && <RepeatedEncryptionTab rsaKey={keyResult} C={opResult ?? 0}
+                      onResult={(s, f) => setAttackRecord({ type: "repeated",  summary: s, found: f })} />}
+                    {attackTab === "signature"  && <SignatureAttackTab rsaKey={keyResult}
+                      onResult={(s, f) => setAttackRecord({ type: "signature", summary: s, found: f })} />}
+                    {attackTab === "chosen"     && <ChosenCiphertextTab rsaKey={keyResult} lastCipher={opResult ?? 0}
+                      onResult={(s, f) => setAttackRecord({ type: "chosen",    summary: s, found: f })} />}
                   </div>
                 </div>
               )}
@@ -1019,38 +1081,99 @@ export default function RsaPanel() {
         {keyResult && (
           <>
             <div className="border-t border-slate-100" />
+
+            {/* Combined PDF status line */}
+            {anyResult && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="text-slate-400">Tayyor bo'limlar:</span>
+                {encryptRecord && (
+                  <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-600 border border-sky-100 px-2 py-0.5 rounded-full font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                    Shifrlash
+                  </span>
+                )}
+                {decryptRecord && (
+                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-full font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                    Deshifrlash
+                  </span>
+                )}
+                {attackRecord && (
+                  <span className="inline-flex items-center gap-1 bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-full font-medium">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                    Kriptotahlil
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <p className="text-xs text-slate-400">
                 {opResult !== null ? "Natijalar PDF ga kiritiladi." : "Shifrlash yoki deshifrlash bajaring, so'ng PDF yuklab oling."}
               </p>
-              <button
-                onClick={handlePDF}
-                disabled={isPdfLoading}
-                className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl
-                  border transition-all
-                  ${isPdfLoading
-                    ? "text-rose-400 border-rose-200 bg-rose-50 cursor-not-allowed"
-                    : "text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95"}`}
-              >
-                {isPdfLoading ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Tayyorlanmoqda…
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-2-2m2 2l2-2" />
-                    </svg>
-                    PDF yuklab olish
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Combined PDF button */}
+                <button
+                  onClick={handleCombinedPDF}
+                  disabled={isCombinedPdfLoading || !anyResult}
+                  title={!anyResult ? "Avval kamida bitta amaliyot bajaring" : "Barcha bo'limlarni bitta PDF ga eksport qilish"}
+                  className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl
+                    border transition-all
+                    ${isCombinedPdfLoading
+                      ? "text-indigo-400 border-indigo-200 bg-indigo-50 cursor-not-allowed"
+                      : !anyResult
+                        ? "text-slate-300 border-slate-200 bg-slate-50 cursor-not-allowed"
+                        : "text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-300 active:scale-95"}`}
+                >
+                  {isCombinedPdfLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Tayyorlanmoqda…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Barchasini PDF
+                    </>
+                  )}
+                </button>
+
+                {/* Single-mode PDF button */}
+                <button
+                  onClick={handlePDF}
+                  disabled={isPdfLoading}
+                  className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl
+                    border transition-all
+                    ${isPdfLoading
+                      ? "text-rose-400 border-rose-200 bg-rose-50 cursor-not-allowed"
+                      : "text-rose-600 border-rose-200 bg-rose-50 hover:bg-rose-100 hover:border-rose-300 active:scale-95"}`}
+                >
+                  {isPdfLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Tayyorlanmoqda…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-2-2m2 2l2-2" />
+                      </svg>
+                      PDF yuklab olish
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </>
         )}
