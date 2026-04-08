@@ -591,6 +591,76 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
     y += gridH + 3;
   };
 
+  const para = (text: string, indent = 0, col: RGB = C.slate700) => {
+    normal(); ss(9); sc(col);
+    const lines = wrap(text, CW - indent);
+    need(lines.length * LH + 2);
+    textLines(lines, ML + indent, y);
+    y += lines.length * LH + 2;
+  };
+
+  const codeBox = (text: string, bg: RGB, fg: RGB) => {
+    const lines = wrap(text, CW - 10);
+    const h = lines.length * 5 + 8;
+    need(h + 3);
+    sf(bg); sd(bg);
+    doc.rect(ML, y, CW, h, "FD");
+    monob(); ss(8.5); sc(fg);
+    textLines(lines, ML + 5, y + 5);
+    y += h + 4;
+  };
+
+  const subTitle = (badge: string, title: string, col: RGB) => {
+    need(14);
+    y += 2;
+    sf(col); sd(col); doc.setLineWidth(0);
+    doc.rect(ML, y - 5.5, 8, 8, "F");
+    bold(); ss(8); sc(C.white);
+    doc.text(badge, ML + 4, y - 1, { align: "center" });
+    bold(); ss(10.5); sc(col);
+    doc.text(title, ML + 12, y);
+    doc.setLineWidth(0.2);
+    y += 6;
+  };
+
+  const questionBlock = (n: number, q: string) => {
+    const qLines = wrap(q, CW - 22);
+    const qH = qLines.length * 5 + 10;
+    need(qH + 2);
+    sf(C.indigo50); sd(C.indigo100);
+    doc.rect(ML, y, CW, qH, "FD");
+    sf(C.indigo700); sd(C.indigo700);
+    doc.rect(ML, y, 10, qH, "F");
+    bold(); ss(12); sc(C.white);
+    doc.text(String(n), ML + 5, y + qH / 2 + 1.5, { align: "center" });
+    bold(); ss(9.5); sc(C.slate900);
+    textLines(qLines, ML + 14, y + 6);
+    y += qH + 4;
+  };
+
+  const answerBlock = (items: Array<{ tag: string; tagColor: RGB; text: string }>) => {
+    const rendered = items.map((it) => ({
+      ...it,
+      lines: wrap(it.text, CW - 18),
+    }));
+    const innerH = rendered.reduce((h, r) => h + r.lines.length * 4.5 + 10, 0) + 4;
+    need(innerH + 2);
+    sf(C.slate50); sd(C.slate200); doc.setLineWidth(0.25);
+    doc.rect(ML, y, CW, innerH, "FD");
+    sf(C.indigo100); sd(C.indigo100);
+    doc.rect(ML, y, 3.5, innerH, "F");
+    doc.setLineWidth(0.2);
+    let iy = y + 6;
+    for (const r of rendered) {
+      bold(); ss(8.5); sc(r.tagColor);
+      doc.text(r.tag, ML + 7, iy); iy += 5;
+      normal(); ss(8.5); sc(C.slate700);
+      r.lines.forEach((ln) => { doc.text(ln, ML + 7, iy); iy += 4.5; });
+      iy += 4;
+    }
+    y += innerH + 5;
+  };
+
   // ── Cover ─────────────────────────────────────────────────────────────────
   sf(C.indigo700); doc.rect(0, 0, PW, 42, "F");
   sf(C.indigo600); doc.rect(0, 38, PW, 4, "F");
@@ -615,8 +685,146 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
 
   y = 72;
 
-  // ── Section 1: Key parameters ─────────────────────────────────────────────
-  sectionTitle("1", "RSA KALIT PARAMETRLARI");
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── 1. MAQSAD ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  sectionTitle("1", "MAQSAD");
+  para(
+    "Ushbu amaliy mashg'ulotda RSA (Rivest-Shamir-Adleman) ochiq kalitli kriptosistemasi " +
+    "bilan tanishish, uning matematik asoslarini — modulli arifmetika, Euler funksiyasi, " +
+    "kalit hosil qilish — o'rganish va shaxsiy kalit ma'lum bo'lmagan holatlarda " +
+    "qo'llaniladigan kriptoanaliz usullarini (takroriy shifrlash, notarius hujumi, " +
+    "tanlangan shifrmatn hujumi) amalda sinab ko'rish maqsad qilingan."
+  );
+  y += 2;
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── 2. NAZARIY QISM ───────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  sectionTitle("2", "NAZARIY QISM");
+
+  subTitle("A", "RSA algoritmi asoslari", C.sky600);
+  para(
+    "RSA ochiq kalitli kriptotizim bo'lib, ikkita katta tub son p va q asosida ishlaydi. " +
+    "n = p*q modulni, phi(n) = (p-1)(q-1) Euler funksiyasini, e ochiq eksponentni, " +
+    "d = e^(-1) mod phi(n) shaxsiy kalitni ifodalaydi. " +
+    "Ochiq kalit (e, n) barcha biladi; shaxsiy kalit (d, n) faqat egasida bo'ladi."
+  );
+  codeBox(
+    "Shifrlash:   C = M^e mod n\n" +
+    "Deshifrlash: M = C^d mod n\n" +
+    "Kalit sharti: d*e = 1 (mod phi(n))",
+    C.slate100, C.indigo700
+  );
+  y += 2;
+
+  subTitle("B", "Takroriy shifrlash hujumi (kalitsiz ochish)", C.amber600);
+  para(
+    "Faqat (e, n) va shifrmatn C ma'lum bo'lganida qo'llaniladi. " +
+    "C0 = C, Cj = C(j-1)^e mod n ketma-ketligi hisoblanadi. " +
+    "Cj = C bo'lganda sikl yopiladi va M = C(j-1) — ochiq matn. " +
+    "Bu usul faqat e ning lambda(n) bo'yicha tartibi kichik bo'lganda amaliy jihatdan samarali."
+  );
+  codeBox(
+    "C1 = C^e mod n\n" +
+    "C2 = C1^e mod n\n" +
+    "... j qadam ...\n" +
+    "Cj = C  =>  M = C(j-1)",
+    C.amber50, C.amber600
+  );
+  y += 2;
+
+  subTitle("C", "Notarius (ko'r imzo) hujumi", C.violet600);
+  para(
+    "Maqsad: notariusdan M xabarga imzo olish, lekin u M ni bevosita imzolamaslik. " +
+    "1) Tasodifiy r tanlanadi (r < n, EKUB(r,n)=1). " +
+    "2) y = r^e * M mod n hisoblanadi va notariusga beriladi. " +
+    "3) Notarius y ni imzolaydi: S_y = y^d mod n = r * M^d mod n. " +
+    "4) Hujumchi: M^d = S_y * r^(-1) mod n — bu M ning to'liq imzosi."
+  );
+  codeBox(
+    "y   = r^e * M mod n           (notariusga yuboriladi)\n" +
+    "S_y = y^d mod n               (notarius imzo qaytaradi)\n" +
+    "M^d = S_y * r^(-1) mod n      (hujumchi hisoblaydi)  v",
+    C.indigo50, C.indigo700
+  );
+  y += 2;
+
+  subTitle("D", "Tanlangan shifrmatn hujumi (CCA)", C.emerald600);
+  para(
+    "Maqsad: C = M^e mod n shifrmatan egaliga M ni oshkor qilish. " +
+    "1) Tasodifiy r tanlanadi (r < n, EKUB(r,n)=1). " +
+    "2) x = r^e mod n, C' = x*C mod n = (rM)^e mod n hisoblanadi. " +
+    "3) Deshifrlash orakuli C' ni ochadi: M' = C'^d mod n = rM mod n. " +
+    "4) Hujumchi: M = M' * r^(-1) mod n — asl ochiq matn tiklanadi."
+  );
+  codeBox(
+    "x  = r^e mod n                  (r ni yashiradi)\n" +
+    "C' = x * C mod n = (rM)^e mod n (orakulga yuboriladi)\n" +
+    "M' = C'^d mod n = rM mod n      (orakuldan olinadi)\n" +
+    "M  = M' * r^(-1) mod n          (hujumchi hisoblaydi)  v",
+    C.emerald100, C.emerald600
+  );
+  y += 4;
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── 3. NAZORAT SAVOLLARI ──────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  sectionTitle("3", "NAZORAT SAVOLLARI");
+
+  questionBlock(1, "RSA algoritmida n, phi(n), e va d parametrlari nimani ifodalaydi?");
+  answerBlock([{
+    tag: "Javob:",
+    tagColor: C.indigo700,
+    text:
+      "n = p*q — modul (ochiq). phi(n) = (p-1)(q-1) — Euler funksiyasi (maxfiy). " +
+      "e — ochiq eksponent, EKUB(e, phi(n)) = 1 shartni qanoatlantiradi. " +
+      "d = e^(-1) mod phi(n) — shaxsiy kalit (faqat egasida). " +
+      "Ochiq kalit: (e, n). Shaxsiy kalit: (d, n).",
+  }]);
+
+  questionBlock(2, "Takroriy shifrlash hujumi qachon muvaffaqiyatli bo'ladi?");
+  answerBlock([{
+    tag: "Javob:",
+    tagColor: C.indigo700,
+    text:
+      "Hujum muvaffaqiyatli bo'lishi uchun e ning Karmaikl funksiyasi lambda(n) " +
+      "bo'yicha tartibi (ord(e) mod lambda(n)) nisbatan kichik bo'lishi kerak. " +
+      "Aks holda sikl astronomik darajada uzun bo'lib, hujum amaliy jihatdan imkonsiz bo'ladi. " +
+      "O'quv maqsadlarida kichik p, q tanlanganda bu sikl qisqa bo'ladi.",
+  }]);
+
+  questionBlock(3, "Ko'r imzo hujumidan qanday himoyalanish mumkin?");
+  answerBlock([{
+    tag: "Javob:",
+    tagColor: C.indigo700,
+    text:
+      "Himoya usullari: 1) Imzodan oldin xabarga hash qo'llash (M ni emas, H(M) ni imzolash). " +
+      "2) RSA-PSS (Probabilistic Signature Scheme) standartidan foydalanish. " +
+      "3) Imzolashdan avval xabar mazmunini insoniy yoki avtomatik tekshiruv. " +
+      "RSA-PKCS#1 v2.1 (OAEP/PSS) standartlari bu hujumga chidamli.",
+  }]);
+
+  questionBlock(4, "Tanlangan shifrmatn hujumini qanday oldini olish mumkin?");
+  answerBlock([{
+    tag: "Javob:",
+    tagColor: C.indigo700,
+    text:
+      "Himoya: OAEP (Optimal Asymmetric Encryption Padding) yoki IND-CCA2 xususiyatiga " +
+      "ega bo'lgan sxemalardan foydalanish. Deshifrlash orakuliga kirish ruxsatini cheklash. " +
+      "RSA-PKCS#1 v2.1 va undan yuqori standartlarni qo'llash. " +
+      "Plain RSA (textbook RSA) hech qachon real tizimda ishlatilmasligi kerak.",
+  }]);
+
+  y += 4;
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ── 4. AMALIY QISM ────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  sectionTitle("4", "AMALIY QISM");
+
+  // ── 4.1 Kalit parametrlari ────────────────────────────────────────────────
+  subTitle("01", "RSA Kalit Parametrlari", C.sky600);
   const kH = 40;
   need(kH + 2);
   sf(C.sky50); sd(C.sky200); doc.setLineWidth(0.2);
@@ -626,21 +834,21 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
   kvRow("p =", String(opts.key.p), c1, py, C.rose600);
   kvRow("q =", String(opts.key.q), c2, py, C.rose600);
   py += 10;
-  kvRow("n = p·q =", String(opts.key.n), c1, py, C.sky700);
-  kvRow("φ(n) =", String(opts.key.phi), c2, py, C.sky700);
+  kvRow("n = p*q =", String(opts.key.n), c1, py, C.sky700);
+  kvRow("phi(n) =", String(opts.key.phi), c2, py, C.sky700);
   py += 10;
   kvRow("e =", String(opts.key.e), c1, py, C.amber600);
   kvRow("d =", String(opts.key.d), c2, py, C.amber600);
   y += kH + 8;
 
-  // ── Section 2: Shifrlash ──────────────────────────────────────────────────
-  sectionTitle("2", "SHIFRLASH NATIJASI", C.indigo700);
+  // ── 4.2 Shifrlash ─────────────────────────────────────────────────────────
+  subTitle("02", "Shifrlash Natijasi", C.indigo700);
   if (!opts.encrypt) {
     emptySection();
   } else if (opts.encrypt.inputMode === "number") {
     need(12);
-    kvRow("Kirish (M):", String(opts.encrypt.inputValue ?? "—"), ML, y, C.slate600); y += 7;
-    kvRow("Natija (C):", String(opts.encrypt.outputValue ?? "—"), ML, y, C.emerald600); y += 7;
+    kvRow("Kirish (M):", String(opts.encrypt.inputValue ?? "-"), ML, y, C.slate600); y += 7;
+    kvRow("Natija (C):", String(opts.encrypt.outputValue ?? "-"), ML, y, C.emerald600); y += 7;
     need(10);
     italic(); ss(8); sc(C.slate500);
     doc.text(
@@ -649,7 +857,6 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
     );
     y += 8;
   } else {
-    // text mode
     if (opts.encrypt.originalText) {
       resultBox("Asl matn:", opts.encrypt.originalText, C.slate50, C.slate900, C.slate200);
     }
@@ -672,14 +879,14 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
     }
   }
 
-  // ── Section 3: Deshifrlash ────────────────────────────────────────────────
-  sectionTitle("3", "DESHIFRLASH NATIJASI", C.sky700);
+  // ── 4.3 Deshifrlash ───────────────────────────────────────────────────────
+  subTitle("03", "Deshifrlash Natijasi", C.sky700);
   if (!opts.decrypt) {
     emptySection();
   } else if (opts.decrypt.inputMode === "number") {
     need(12);
-    kvRow("Kirish (C):", String(opts.decrypt.inputValue ?? "—"), ML, y, C.slate600); y += 7;
-    kvRow("Natija (M):", String(opts.decrypt.outputValue ?? "—"), ML, y, C.emerald600); y += 7;
+    kvRow("Kirish (C):", String(opts.decrypt.inputValue ?? "-"), ML, y, C.slate600); y += 7;
+    kvRow("Natija (M):", String(opts.decrypt.outputValue ?? "-"), ML, y, C.emerald600); y += 7;
     need(10);
     italic(); ss(8); sc(C.slate500);
     doc.text(
@@ -688,7 +895,6 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
     );
     y += 8;
   } else {
-    // text mode
     if (opts.decrypt.cipherNums && opts.decrypt.cipherNums.length > 0) {
       resultBox(
         "Shifrlangan raqamlar:",
@@ -711,13 +917,13 @@ export async function generateCombinedRsaPDF(opts: CombinedRsaPDFOptions): Promi
     }
   }
 
-  // ── Section 4: Kriptoanaliz ────────────────────────────────────────────────
+  // ── 4.4 Kriptoanaliz ──────────────────────────────────────────────────────
   const attackLabels: Record<string, string> = {
     repeated:  "Takroriy shifrlash hujumi",
     signature: "Notarius (ko'r imzo) hujumi",
     chosen:    "Tanlangan shifrmatn hujumi",
   };
-  sectionTitle("4", "KRIPTOANALIZ NATIJALARI", C.amber600);
+  subTitle("04", "Kriptoanaliz Natijalari", C.amber600);
   if (!opts.attack) {
     emptySection();
   } else {
