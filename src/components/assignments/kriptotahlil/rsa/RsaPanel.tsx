@@ -54,6 +54,59 @@ function SectionBadge({ children, color = "sky" }: { children: React.ReactNode; 
   );
 }
 
+// ── Copy button ───────────────────────────────────────────────────────────────
+function CopyButton({ text, label = "Nusxalash" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback for browsers without clipboard API
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-lg
+        border transition-all active:scale-95
+        ${copied
+          ? "bg-green-500 text-white border-green-500"
+          : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"}`}
+    >
+      {copied ? (
+        <>
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+          Nusxalandi
+        </>
+      ) : (
+        <>
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          {label}
+        </>
+      )}
+    </button>
+  );
+}
+
 // ── Number input helper ────────────────────────────────────────────────────────
 function NumInput({
   label, value, onChange, placeholder, hint, error,
@@ -719,9 +772,45 @@ export default function RsaPanel() {
                   {inputMode === "text" && (
                     <>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                          {mode === "encrypt" ? "Matn kiriting" : "Shifrlangan raqamlar (bo'sh joy bilan)"}
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                            {mode === "encrypt" ? "Matn kiriting" : "Shifrlangan raqamlar"}
+                          </label>
+                          {mode === "decrypt" && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const raw = await navigator.clipboard.readText();
+                                  // Normalize: strip brackets, replace commas + extra spaces → single space
+                                  const clean = raw
+                                    .replace(/[\[\](){}]/g, "")
+                                    .replace(/,/g, " ")
+                                    .replace(/\s+/g, " ")
+                                    .trim();
+                                  // Validate it contains only digits and spaces
+                                  if (!/^[\d\s]+$/.test(clean)) {
+                                    setOpError("Clipboard matni raqamlar emas. Faqat shifrlangan raqamlarni nusxalang.");
+                                    return;
+                                  }
+                                  setTextInput(clean);
+                                  setTextResult(null);
+                                  setOpError("");
+                                } catch {
+                                  setOpError("Clipboard o'qib bo'lmadi. Matnni qo'lda joylashtiring (Ctrl+V).");
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1
+                                rounded-lg border border-sky-200 bg-sky-50 text-sky-600
+                                hover:bg-sky-100 hover:border-sky-300 transition-all active:scale-95"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              Qo&apos;yish
+                            </button>
+                          )}
+                        </div>
                         {mode === "encrypt" ? (
                           <textarea
                             value={textInput}
@@ -748,7 +837,7 @@ export default function RsaPanel() {
                         <p className="text-[10px] text-slate-400">
                           {mode === "encrypt"
                             ? `Har bir belgi ASCII kodi n = ${keyResult.n} dan kichik bo'lishi kerak`
-                            : "Raqamlarni bo'sh joy yoki vergul bilan ajrating"}
+                            : "Raqamlarni bo'sh joy yoki vergul bilan ajrating · [2081,2294] ham qabul qilinadi"}
                         </p>
                       </div>
 
@@ -811,7 +900,10 @@ export default function RsaPanel() {
                                 <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 border-b border-slate-800">
                                   <span className="w-5 h-5 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">3</span>
                                   <span className="text-xs font-semibold text-green-400">Shifrlangan natija</span>
-                                  <span className="ml-auto text-[10px] text-slate-500 font-mono">Cᵢ = Mᵢ^e mod n</span>
+                                  <span className="text-[10px] text-slate-500 font-mono">Cᵢ = Mᵢ^e mod n</span>
+                                  <div className="ml-auto">
+                                    <CopyButton text={textResult.processed.join(" ")} />
+                                  </div>
                                 </div>
                                 <div className="bg-slate-950 px-4 py-3">
                                   <p className="text-green-400 text-sm font-mono break-all leading-relaxed">
