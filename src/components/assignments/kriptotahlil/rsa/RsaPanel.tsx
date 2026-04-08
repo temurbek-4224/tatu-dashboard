@@ -11,6 +11,14 @@ import { generateRsaLabPDF, type RsaPDFOptions } from "@/lib/rsaPdfExport";
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Mode       = "encrypt" | "decrypt" | "analyze";
 type AttackTab  = "repeated" | "signature" | "chosen";
+type InputMode  = "number" | "text";
+
+interface TextOpResult {
+  originalText: string;
+  asciiCodes: number[];
+  processed: number[];   // encrypted or decrypted numbers
+  decodedText?: string;  // only on decrypt
+}
 
 // ── Small UI helpers ───────────────────────────────────────────────────────────
 function StepRow({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
@@ -382,8 +390,11 @@ export default function RsaPanel() {
   // Encrypt/Decrypt
   const [mode, setMode]               = useState<Mode>("encrypt");
   const [attackTab, setAttackTab]     = useState<AttackTab>("repeated");
+  const [inputMode, setInputMode]     = useState<InputMode>("number");
   const [msgInput, setMsgInput]       = useState("");
+  const [textInput, setTextInput]     = useState("");
   const [opResult, setOpResult]       = useState<number | null>(null);
+  const [textResult, setTextResult]   = useState<TextOpResult | null>(null);
   const [opError, setOpError]         = useState("");
 
   const [isPdfLoading, setIsPdfLoading] = useState(false);
@@ -418,12 +429,68 @@ export default function RsaPanel() {
     setOpResult(res);
   };
 
+  // Text mode encrypt/decrypt
+  const handleTextOperation = () => {
+    setOpError(""); setTextResult(null);
+    if (!keyResult) return;
+
+    if (mode === "encrypt") {
+      const text = textInput;
+      if (!text) { setOpError("Matn kiriting."); return; }
+      const codes = Array.from(text).map((ch) => ch.charCodeAt(0));
+      const overLimit = codes.filter((c) => c >= keyResult.n);
+      if (overLimit.length > 0) {
+        setOpError(
+          `${overLimit.length} ta belgi ASCII kodi (${overLimit[0]}…) n = ${keyResult.n} dan katta yoki teng. ` +
+          `Kattaroq p va q tanlang.`
+        );
+        return;
+      }
+      const encrypted = codes.map((c) => rsaEncrypt(c, keyResult.e, keyResult.n));
+      setTextResult({ originalText: text, asciiCodes: codes, processed: encrypted });
+    } else {
+      // decrypt: expect space-separated numbers
+      const raw = textInput.trim();
+      if (!raw) { setOpError("Shifrlangan raqamlarni kiriting."); return; }
+      const nums = raw.split(/[\s,]+/).map((s) => parseInt(s, 10));
+      if (nums.some(isNaN)) { setOpError("Faqat raqamlar (bo'sh joy bilan ajratilgan) kiriting."); return; }
+      const overLimit = nums.filter((c) => c >= keyResult.n);
+      if (overLimit.length > 0) {
+        setOpError(`Raqam ${overLimit[0]} n = ${keyResult.n} dan katta yoki teng.`);
+        return;
+      }
+      const decrypted = nums.map((c) => rsaDecrypt(c, keyResult.d, keyResult.n));
+      const decodedText = decrypted.map((v) => {
+        if (v >= 32 && v < 127) return String.fromCharCode(v);
+        return `[${v}]`;
+      }).join("");
+      setTextResult({
+        originalText: raw,
+        asciiCodes: decrypted,
+        processed: nums,
+        decodedText,
+      });
+    }
+  };
+
   // Switch mode — reset operation result
   const switchMode = (m: Mode) => {
     setMode(m);
     setOpResult(null);
+    setTextResult(null);
     setOpError("");
     setMsgInput("");
+    setTextInput("");
+  };
+
+  // Switch input mode — reset results
+  const switchInputMode = (im: InputMode) => {
+    setInputMode(im);
+    setOpResult(null);
+    setTextResult(null);
+    setOpError("");
+    setMsgInput("");
+    setTextInput("");
   };
 
   // PDF export
@@ -574,31 +641,246 @@ export default function RsaPanel() {
               {/* ── Encrypt / Decrypt operation ─────────────────────────── */}
               {mode !== "analyze" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <NumInput
-                      label={inputLabel}
-                      value={msgInput}
-                      onChange={(v) => { setMsgInput(v); setOpResult(null); setOpError(""); }}
-                      placeholder={mode === "encrypt" ? `0 – ${keyResult.n - 1}` : "Shifrmatn"}
-                      hint={mode === "encrypt" ? `M < n = ${keyResult.n}` : `C < n = ${keyResult.n}`}
-                    />
-                    <div className="flex items-end pb-0.5">
+
+                  {/* Input mode toggle: Raqam / Matn */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kirish turi:</span>
+                    <div className="inline-flex p-0.5 bg-slate-100 rounded-lg gap-0.5">
+                      {([
+                        { id: "number", label: "Raqam" },
+                        { id: "text",   label: "Matn" },
+                      ] as const).map((im) => (
+                        <button key={im.id} onClick={() => switchInputMode(im.id)}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all
+                            ${inputMode === im.id
+                              ? "bg-white text-slate-800 shadow-sm"
+                              : "text-slate-400 hover:text-slate-600"}`}>
+                          {im.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── NUMBER mode ──────────────────────────────────────── */}
+                  {inputMode === "number" && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <NumInput
+                          label={inputLabel}
+                          value={msgInput}
+                          onChange={(v) => { setMsgInput(v); setOpResult(null); setOpError(""); }}
+                          placeholder={mode === "encrypt" ? `0 – ${keyResult.n - 1}` : "Shifrmatn"}
+                          hint={mode === "encrypt" ? `M < n = ${keyResult.n}` : `C < n = ${keyResult.n}`}
+                        />
+                        <div className="flex items-end pb-0.5">
+                          <button
+                            onClick={handleOperation}
+                            disabled={!msgInput.trim()}
+                            className={`w-full flex items-center justify-center gap-2 text-sm font-semibold
+                              px-4 py-2.5 rounded-xl transition-all active:scale-95
+                              ${!msgInput.trim()
+                                ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                : mode === "encrypt"
+                                  ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+                                  : "bg-sky-600 hover:bg-sky-700 text-white shadow-sm"}`}
+                          >
+                            {mode === "encrypt" ? "Shifrlash" : "Deshifrlash"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {opResult !== null && (
+                        <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden animate-result-in">
+                          <div className="bg-slate-950 px-4 py-3 font-mono">
+                            <p className="text-xs text-slate-500 mb-1">
+                              <span className="text-slate-600">$</span>{" "}
+                              {mode === "encrypt"
+                                ? `rsa_encrypt(M=${msgInput}, e=${keyResult.e}, n=${keyResult.n})`
+                                : `rsa_decrypt(C=${msgInput}, d=${keyResult.d}, n=${keyResult.n})`}
+                            </p>
+                            <p className="text-green-400 text-base font-bold break-all">
+                              <span className="text-slate-500 mr-1">›</span>
+                              {outputLabel} = <span className="text-green-300">{opResult}</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border-t border-indigo-100">
+                            <span className="text-xs text-indigo-700 font-mono">
+                              {mode === "encrypt"
+                                ? `${msgInput}^${keyResult.e} mod ${keyResult.n} = ${opResult}`
+                                : `${msgInput}^${keyResult.d} mod ${keyResult.n} = ${opResult}`}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── TEXT mode ────────────────────────────────────────── */}
+                  {inputMode === "text" && (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                          {mode === "encrypt" ? "Matn kiriting" : "Shifrlangan raqamlar (bo'sh joy bilan)"}
+                        </label>
+                        {mode === "encrypt" ? (
+                          <textarea
+                            value={textInput}
+                            onChange={(e) => { setTextInput(e.target.value); setTextResult(null); setOpError(""); }}
+                            rows={3}
+                            placeholder="Masalan: HELLO"
+                            className="w-full resize-none rounded-xl border px-4 py-3 text-sm font-mono
+                              text-slate-800 placeholder-slate-300 bg-white outline-none transition-all
+                              focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300
+                              border-slate-200 hover:border-slate-300"
+                          />
+                        ) : (
+                          <textarea
+                            value={textInput}
+                            onChange={(e) => { setTextInput(e.target.value); setTextResult(null); setOpError(""); }}
+                            rows={3}
+                            placeholder="Masalan: 2081 2294 2710 2710 2181"
+                            className="w-full resize-none rounded-xl border px-4 py-3 text-sm font-mono
+                              text-slate-800 placeholder-slate-300 bg-white outline-none transition-all
+                              focus:ring-2 focus:ring-sky-200 focus:border-sky-300
+                              border-slate-200 hover:border-slate-300"
+                          />
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          {mode === "encrypt"
+                            ? `Har bir belgi ASCII kodi n = ${keyResult.n} dan kichik bo'lishi kerak`
+                            : "Raqamlarni bo'sh joy yoki vergul bilan ajrating"}
+                        </p>
+                      </div>
+
                       <button
-                        onClick={handleOperation}
-                        disabled={!msgInput.trim()}
-                        className={`w-full flex items-center justify-center gap-2 text-sm font-semibold
-                          px-4 py-2.5 rounded-xl transition-all active:scale-95
-                          ${!msgInput.trim()
+                        onClick={handleTextOperation}
+                        disabled={!textInput.trim()}
+                        className={`flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl
+                          transition-all active:scale-95
+                          ${!textInput.trim()
                             ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                             : mode === "encrypt"
                               ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
                               : "bg-sky-600 hover:bg-sky-700 text-white shadow-sm"}`}
                       >
-                        {mode === "encrypt" ? "Shifrlash" : "Deshifrlash"}
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        {mode === "encrypt" ? "Matni shifrlash" : "Raqamlarni deshifrlash"}
                       </button>
-                    </div>
-                  </div>
 
+                      {/* Text result blocks */}
+                      {textResult && (
+                        <div className="space-y-3 animate-result-in">
+                          {mode === "encrypt" ? (
+                            <>
+                              {/* Block 1 — Original text */}
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
+                                  <span className="w-5 h-5 rounded-full bg-slate-300 text-white text-[10px] font-bold flex items-center justify-center">1</span>
+                                  <span className="text-xs font-semibold text-slate-500">Asl matn</span>
+                                </div>
+                                <div className="px-4 py-3 font-mono text-sm text-slate-800 bg-white break-all">
+                                  {textResult.originalText}
+                                </div>
+                              </div>
+
+                              {/* Block 2 — ASCII codes */}
+                              <div className="rounded-xl border border-indigo-100 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border-b border-indigo-100">
+                                  <span className="w-5 h-5 rounded-full bg-indigo-400 text-white text-[10px] font-bold flex items-center justify-center">2</span>
+                                  <span className="text-xs font-semibold text-indigo-600">Raqamli ko&apos;rinish (ASCII)</span>
+                                </div>
+                                <div className="px-4 py-3 bg-white">
+                                  <div className="flex flex-wrap gap-2">
+                                    {textResult.asciiCodes.map((code, i) => (
+                                      <div key={i} className="flex flex-col items-center gap-0.5">
+                                        <span className="text-xs font-mono font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
+                                          {String.fromCharCode(code) === " " ? "SPC" : String.fromCharCode(code)}
+                                        </span>
+                                        <span className="text-[10px] font-mono text-indigo-600">{code}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Block 3 — Encrypted numbers */}
+                              <div className="rounded-xl border border-green-200 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 border-b border-slate-800">
+                                  <span className="w-5 h-5 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">3</span>
+                                  <span className="text-xs font-semibold text-green-400">Shifrlangan natija</span>
+                                  <span className="ml-auto text-[10px] text-slate-500 font-mono">Cᵢ = Mᵢ^e mod n</span>
+                                </div>
+                                <div className="bg-slate-950 px-4 py-3">
+                                  <p className="text-green-400 text-sm font-mono break-all leading-relaxed">
+                                    {textResult.processed.join(" ")}
+                                  </p>
+                                </div>
+                                <div className="px-4 py-2 bg-slate-900 border-t border-slate-800">
+                                  <p className="text-[10px] text-slate-400 font-mono">
+                                    {textResult.asciiCodes.map((m, i) =>
+                                      `${m}^${keyResult.e} mod ${keyResult.n} = ${textResult.processed[i]}`
+                                    ).slice(0, 4).join("  |  ")}
+                                    {textResult.asciiCodes.length > 4 ? "  | …" : ""}
+                                  </p>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {/* Block 1 — Encrypted input */}
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100">
+                                  <span className="w-5 h-5 rounded-full bg-slate-300 text-white text-[10px] font-bold flex items-center justify-center">1</span>
+                                  <span className="text-xs font-semibold text-slate-500">Shifrlangan raqamlar</span>
+                                </div>
+                                <div className="px-4 py-3 font-mono text-sm text-slate-600 bg-white break-all">
+                                  {textResult.processed.join(" ")}
+                                </div>
+                              </div>
+
+                              {/* Block 2 — Decrypted ASCII codes */}
+                              <div className="rounded-xl border border-sky-100 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border-b border-sky-100">
+                                  <span className="w-5 h-5 rounded-full bg-sky-400 text-white text-[10px] font-bold flex items-center justify-center">2</span>
+                                  <span className="text-xs font-semibold text-sky-600">Deshifrlangan raqamlar (ASCII)</span>
+                                </div>
+                                <div className="px-4 py-3 bg-white">
+                                  <div className="flex flex-wrap gap-2">
+                                    {textResult.asciiCodes.map((code, i) => (
+                                      <div key={i} className="flex flex-col items-center gap-0.5">
+                                        <span className="text-xs font-mono font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
+                                          {code >= 32 && code < 127 ? String.fromCharCode(code) : `[${code}]`}
+                                        </span>
+                                        <span className="text-[10px] font-mono text-sky-600">{code}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Block 3 — Decoded text */}
+                              <div className="rounded-xl border border-green-200 overflow-hidden">
+                                <div className="flex items-center gap-2 px-3 py-2 bg-slate-950 border-b border-slate-800">
+                                  <span className="w-5 h-5 rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">3</span>
+                                  <span className="text-xs font-semibold text-green-400">Ochiq matn</span>
+                                </div>
+                                <div className="bg-slate-950 px-4 py-4">
+                                  <p className="text-green-300 text-lg font-mono font-bold tracking-wide break-all">
+                                    {textResult.decodedText}
+                                  </p>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Shared error display */}
                   {opError && (
                     <p className="text-xs text-rose-500 flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
@@ -606,30 +888,6 @@ export default function RsaPanel() {
                       </svg>
                       {opError}
                     </p>
-                  )}
-
-                  {opResult !== null && (
-                    <div className="bg-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden animate-result-in">
-                      <div className="bg-slate-950 px-4 py-3 font-mono">
-                        <p className="text-xs text-slate-500 mb-1">
-                          <span className="text-slate-600">$</span>{" "}
-                          {mode === "encrypt"
-                            ? `rsa_encrypt(M=${msgInput}, e=${keyResult.e}, n=${keyResult.n})`
-                            : `rsa_decrypt(C=${msgInput}, d=${keyResult.d}, n=${keyResult.n})`}
-                        </p>
-                        <p className="text-green-400 text-base font-bold break-all">
-                          <span className="text-slate-500 mr-1">›</span>
-                          {outputLabel} = <span className="text-green-300">{opResult}</span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 px-4 py-2.5 bg-indigo-50 border-t border-indigo-100">
-                        <span className="text-xs text-indigo-700 font-mono">
-                          {mode === "encrypt"
-                            ? `${msgInput}^${keyResult.e} mod ${keyResult.n} = ${opResult}`
-                            : `${msgInput}^${keyResult.d} mod ${keyResult.n} = ${opResult}`}
-                        </span>
-                      </div>
-                    </div>
                   )}
                 </div>
               )}
