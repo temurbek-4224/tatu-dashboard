@@ -39,15 +39,17 @@ export const subjects: Subject[] = [
         id: "kr-a2",
         slug: "2-topshiriq",
         title: "2-topshiriq",
-        description: "Simmetrik shifrlash — AES algoritmi bilan tanishish",
+        description: "RSA algoritmi kriptotahlili — kalitsiz ochish usullari",
         taskDetails:
-          "AES (Advanced Encryption Standard) algoritmining ishlash prinsipi va asosiy tushunchalarini " +
-          "o'rganing. Blok shifrlash, padding, CBC/ECB rejimlarini tahlil qiling. " +
-          "Web Crypto API yordamida oddiy AES-256-CBC shifrlash/deshifrlash misolini yarating.",
-        status: "demo",
+          "RSA (Rivest–Shamir–Adleman) ochiq kalitli kriptosistemasi bilan tanishing. " +
+          "Kalit hosil qilish (p, q, e, n, phi, d), shifrlash va deshifrlash operatsiyalarini bajaring. " +
+          "Takroriy shifrlash hujumi, notarius (ko'r imzo) hujumi va tanlangan shifrmatn hujumini " +
+          "interaktiv laboratoriya vositasida amalda sinab ko'ring.",
+        status: "jarayonda",
         programType: "placeholder",
         notes:
-          "Bu topshiriq demo rejimida. Keyingi bosqichda Web Crypto API integratsiyasi rejalashtirilgan.",
+          "Interaktiv RSA laboratoriya vositasi mavjud: kalit generatsiya, shifrlash/deshifrlash " +
+          "va uchta kriptoanaliz hujumi demosi. PDF eksport funksiyasi ham ta'minlangan.",
       },
       {
         id: "kr-a3",
