@@ -55,15 +55,19 @@ export const subjects: Subject[] = [
         id: "kr-a3",
         slug: "3-topshiriq",
         title: "3-topshiriq",
-        description: "Hash funksiyalar — SHA-256 va MD5 tahlili",
+        description: "S-box va kriptotahlil usullari — LAT va DDT tahlili",
         taskDetails:
-          "Kriptografik hash funksiyalarining xususiyatlarini (bir tomonlama, to'qnashuvga chidamlilik) " +
-          "o'rganing. SHA-256 va MD5 algoritmlarini solishtiring. " +
-          "Berilgan matn uchun hash qiymatini hisoblang va o'zgartirilgan matn hash qiymatini solishtiring.",
-        status: "demo",
+          "S-box (almashish quticha) tushunchasini o'rganing va uning blok shifrlar (AES, DES, PRESENT) dagi rolini tushuning. " +
+          "Chiziqli kriptotahlil (LAT — Chiziqli Approximatsiya Jadvali) va " +
+          "differentsial kriptotahlil (DDT — Differentsial Taqsimot Jadvali) usullarini " +
+          "interaktiv laboratoriya vositasida amalda sinab ko'ring. " +
+          "S-box ning nochiziqlilik va differentsial uniformlik ko'rsatkichlarini hisoblang va baholang.",
+        status: "jarayonda",
         programType: "placeholder",
         notes:
-          "Hash funksiyalar topshirig'i demo rejimida. SubtleCrypto API dan foydalanish rejalashtirilgan.",
+          "Interaktiv S-box laboratoriya vositasi mavjud: S-box tahlili (LAT/DDT heat map), " +
+          "chiziqli tahlil (bias hisoblash) va differentsial tahlil (DX/DY juftlari). " +
+          "PDF eksport funksiyasi ham ta'minlangan.",
       },
     ],
   },
