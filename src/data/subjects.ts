@@ -69,6 +69,25 @@ export const subjects: Subject[] = [
           "chiziqli tahlil (bias hisoblash) va differentsial tahlil (DX/DY juftlari). " +
           "PDF eksport funksiyasi ham ta'minlangan.",
       },
+      {
+        id: "kr-a4",
+        slug: "4-topshiriq",
+        title: "4-topshiriq",
+        description: "SP tarmog'i va kriptotahlil — SPN shifri, differentsial va kalit tiklovchi hujum",
+        taskDetails:
+          "Substitution-Permutation Network (SPN) tuzilmasini o'rganing: S-box (confusion), " +
+          "P-box (diffusion) va kalit qo'shish bosqichlari. " +
+          "2-raundli 4-bitli o'quv SPN shifri (PRESENT S-box asosida) ustida " +
+          "differentsial kriptotahlil xarakteristikasini aniqlang (ΔX=6, DDT[6][11]=4). " +
+          "Oxirgi raund kalitini (K3) tiklovchi chosen-plaintext hujumini amalda bajarib ko'ring. " +
+          "Chiziqli kriptotahlil asoslarini ham o'rganing.",
+        status: "jarayonda",
+        programType: "placeholder",
+        notes:
+          "Interaktiv SPN laboratoriya vositasi mavjud: SPN simulatoru (shifrlash izlari), " +
+          "differentsial tahlil (ΔX/ΔY/ΔU zanjiri) va kalit tiklovchi hujum (K3 kandidatlari). " +
+          "PDF eksport funksiyasi ham ta'minlangan.",
+      },
     ],
   },
 
